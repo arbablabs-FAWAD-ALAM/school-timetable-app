@@ -232,6 +232,11 @@ if "generated_timetable" not in st.session_state:
 if "teacher_workload" not in st.session_state:
     st.session_state.teacher_workload = None
 
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = [
+        {"role": "assistant", "content": "👋 **Hello!** I am your AI Timetable Assistant powered by Google Gemini.\n\nYou can give me natural language instructions to adjust the timetable, for example:\n- *'Change Alishba's 3rd period class to Zeenat'*\n- *'Assign Fahad to Class 10th in Period 2'*\n- *'Switch Class 8 Period 4 Chemistry to Atia Hassan'*"}
+    ]
+
 # ==============================================================================
 # 4. AUTOMATED SCHEDULING ALGORITHM (MAX-FLOW + BIPARTITE COLORING)
 # ==============================================================================
@@ -505,12 +510,127 @@ def create_pdf(schedule, classes):
     return pdf_bytes
 
 # ==============================================================================
+# 6. GEMINI AI ASSISTANT FUNCTIONS
+# ==============================================================================
+import json
+
+def query_gemini_assistant(api_key, user_prompt, timetable_dict):
+    """
+    Sends natural language command and timetable data to Google Gemini.
+    Forces JSON output with required schema.
+    """
+    system_instruction = (
+        "You are an expert AI School Timetable Assistant. Your job is to modify teacher assignments based on user natural language commands.\n"
+        "You MUST respond ONLY with a raw JSON object (no markdown code fences, no conversational text outside JSON).\n\n"
+        "REQUIRED JSON SCHEMA:\n"
+        "{\n"
+        '  "action": "update_slot" | "no_change",\n'
+        '  "period": "<e.g., Period 3>",\n'
+        '  "class_name": "<e.g., Class 1 or Class 10>",\n'
+        '  "new_teacher": "<e.g., Zeenat>",\n'
+        '  "new_subject": "<optional subject name if updated, or null>",\n'
+        '  "explanation": "<Brief user-facing summary of the change or why it cannot be made>"\n'
+        "}\n\n"
+        "If the user request cannot be fulfilled, return action: 'no_change' with an explanation."
+    )
+
+    prompt_content = (
+        f"CURRENT TIMETABLE STATE:\n{json.dumps(timetable_dict, indent=2)}\n\n"
+        f"USER COMMAND:\n{user_prompt}\n\n"
+        "Analyze the current timetable and user command, determine the exact slot to update, and return the JSON object."
+    )
+
+    # 1. Try google.generativeai SDK first
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            system_instruction=system_instruction,
+            generation_config={"response_mime_type": "application/json"}
+        )
+        response = model.generate_content(prompt_content)
+        return response.text
+    except Exception:
+        # 2. Fallback to Google Gemini REST API endpoint
+        import requests
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        payload = {
+            "contents": [{"parts": [{"text": f"{system_instruction}\n\n{prompt_content}"}]}],
+            "generationConfig": {"response_mime_type": "application/json"}
+        }
+        res = requests.post(url, json=payload, timeout=25)
+        res_json = res.json()
+        if "error" in res_json:
+            raise Exception(res_json["error"].get("message", "Gemini API error"))
+        return res_json["candidates"][0]["content"]["parts"][0]["text"]
+
+def apply_ai_changes(response_text):
+    """
+    Parses the JSON response from Gemini and safely updates st.session_state.generated_timetable.
+    Validates clashes and teacher workloads.
+    """
+    raw = response_text.strip()
+    if raw.startswith("```json"): raw = raw[7:]
+    if raw.startswith("```"): raw = raw[3:]
+    if raw.endswith("```"): raw = raw[:-3]
+    
+    data = json.loads(raw.strip())
+    
+    if data.get("action") == "update_slot" and data.get("new_teacher"):
+        period = data.get("period")
+        class_name = data.get("class_name")
+        new_teacher = data.get("new_teacher")
+        new_subject = data.get("new_subject")
+        
+        # Standardize class name
+        if class_name and class_name.isdigit():
+            class_name = f"Class {class_name}"
+            
+        timetable = st.session_state.generated_timetable
+        if timetable is None:
+            return False, "Timetable is not yet generated. Please click 'Generate Clash-Free Timetable' first."
+            
+        # Strict Clash Detection: Is new_teacher already teaching another class in this period?
+        clashes = [c_k for (c_k, p_k), (s_k, t_k) in timetable.items() if p_k.lower() == period.lower() and t_k.lower() == new_teacher.lower() and c_k != class_name]
+        if clashes:
+            return False, f"❌ Clash Blocked: **{new_teacher}** is already teaching **{clashes[0]}** during **{period}**!"
+            
+        old_entry = timetable.get((class_name, period), None)
+        old_subject = old_entry[0] if old_entry else "General"
+        final_subject = new_subject if new_subject else old_subject
+        
+        # Safe state update
+        timetable[(class_name, period)] = (final_subject, new_teacher)
+        
+        # Refresh teacher workloads
+        new_loads = defaultdict(int)
+        for (c, p), (s, t) in timetable.items():
+            new_loads[t] += 1
+        st.session_state.teacher_workload = new_loads
+        
+        expl = data.get("explanation", f"Assigned {new_teacher} to {class_name} during {period}.")
+        return True, f"✅ {expl}"
+        
+    return False, data.get("explanation", "No modifications were made.")
+
+# ==============================================================================
 # SIDEBAR: GENERATOR CONTROLS & ADD NEW TEACHER
 # ==============================================================================
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2602/2602414.png", width=60)
     st.markdown("### 🎛️ Timetable Controls")
     
+    # Secure Gemini API Key Input
+    st.markdown("#### 🤖 AI Assistant Key")
+    gemini_api_key = st.text_input(
+        "Google Gemini API Key",
+        type="password",
+        placeholder="AIzaSy...",
+        help="Enter your Google Gemini API key to enable natural language timetable modifications."
+    )
+    st.divider()
+
     # Generate Timetable Button
     st.markdown("#### ⚡ Automatic Scheduler")
     generate_btn = st.button("🚀 Generate Clash-Free Timetable", type="primary", use_container_width=True)
@@ -613,12 +733,13 @@ with m4:
 st.write("")
 
 # Main Tabs Navigation
-tab_grid, tab_teacher, tab_workload, tab_faculty, tab_curriculum = st.tabs([
+tab_grid, tab_teacher, tab_workload, tab_faculty, tab_curriculum, tab_ai = st.tabs([
     "📅 Master Timetable Matrix",
     "👨‍🏫 Teacher-wise Routine",
     "📊 Workload & Free Periods",
     "👥 Faculty Profiles & Limits",
-    "📚 Classes & Required Subjects"
+    "📚 Classes & Required Subjects",
+    "💬 AI Assistant"
 ])
 
 # ------------------------------------------------------------------------------
@@ -829,3 +950,52 @@ with tab_curriculum:
         })
         
     st.dataframe(pd.DataFrame(c_summary), use_container_width=True)
+
+# ------------------------------------------------------------------------------
+# TAB 6: AI CHAT ASSISTANT (GOOGLE GEMINI)
+# ------------------------------------------------------------------------------
+with tab_ai:
+    st.subheader("💬 AI Timetable Assistant (Google Gemini)")
+    st.write("Modify teacher assignments using natural language commands. Example: *'Change Alishba's 3rd period class to Zeenat'* or *'Assign Sana Ullah to Class 9 in Period 1'*.")
+
+    if not gemini_api_key:
+        st.warning("🔑 Please enter your **Google Gemini API Key** in the left sidebar to activate the AI Assistant.")
+
+    # Render Chat History
+    for msg in st.session_state.chat_messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # Chat Input
+    if prompt := st.chat_input("Enter natural language timetable command..."):
+        if not gemini_api_key:
+            st.error("Please provide a Gemini API Key in the sidebar before sending commands.")
+        elif st.session_state.generated_timetable is None:
+            st.error("Please click '🚀 Generate Clash-Free Timetable' first so there is schedule data to modify.")
+        else:
+            # Add user message to state & render
+            st.session_state.chat_messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+
+            # Format timetable dict for Gemini: {(cls, p): (subj, teacher)} -> dict
+            timetable_dict = {}
+            for (cls, p), (subj, teacher) in st.session_state.generated_timetable.items():
+                if p not in timetable_dict:
+                    timetable_dict[p] = {}
+                timetable_dict[p][cls] = f"{teacher} ({subj})"
+
+            with st.chat_message("assistant"):
+                with st.spinner("AI is analyzing timetable and planning modifications..."):
+                    try:
+                        ai_response_text = query_gemini_assistant(gemini_api_key, prompt, timetable_dict)
+                        success, update_msg = apply_ai_changes(ai_response_text)
+                        
+                        st.markdown(update_msg)
+                        st.session_state.chat_messages.append({"role": "assistant", "content": update_msg})
+                        if success:
+                            st.rerun()
+                    except Exception as err:
+                        err_text = f"⚠️ **AI Assistant Error:** {str(err)}"
+                        st.error(err_text)
+                        st.session_state.chat_messages.append({"role": "assistant", "content": err_text})

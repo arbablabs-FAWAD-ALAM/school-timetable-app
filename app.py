@@ -67,11 +67,18 @@ DEFAULT_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturda
 PERIODS = [f"Period {i}" for i in range(1, 9)]
 
 DEFAULT_CLASSES = [
-    "1st", "2nd", "3rd", "4th", "5th", 
-    "6th", "7th", "8th", 
-    "9th", "9th Girls", 
-    "10th", "10th Girls", 
-    "1st Year", "2nd Year"
+    "1st", "1st Girls",
+    "2nd", "2nd Girls",
+    "3rd", "3rd Girls",
+    "4th", "4th Girls",
+    "5th", "5th Girls",
+    "6th", "6th Girls",
+    "7th", "7th Girls",
+    "8th", "8th Girls",
+    "9th", "9th Girls",
+    "10th", "10th Girls",
+    "1st Year", "1st Year Girls",
+    "2nd Year", "2nd Year Girls"
 ]
 
 DEFAULT_TEACHERS = [
@@ -95,8 +102,8 @@ if "assignments" not in st.session_state:
     # Stored as list of dicts: {"id": str, "day": str, "period": str, "class": str, "teacher": str, "subject": str}
     st.session_state.assignments = []
 
-# If classes_list is not set or has the old A/B sections, refresh it to the new list
-if "classes_list" not in st.session_state or any(c.endswith(" A") or c.endswith(" B") for c in st.session_state.classes_list):
+# If classes_list is not set or has an older class list, refresh it to the new list
+if "classes_list" not in st.session_state or len(st.session_state.classes_list) != len(DEFAULT_CLASSES):
     st.session_state.classes_list = DEFAULT_CLASSES.copy()
 
 if "teachers_list" not in st.session_state:

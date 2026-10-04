@@ -67,18 +67,11 @@ DEFAULT_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturda
 PERIODS = [f"Period {i}" for i in range(1, 9)]
 
 DEFAULT_CLASSES = [
-    "1st A", "1st B",
-    "2nd A", "2nd B",
-    "3rd A", "3rd B",
-    "4th A", "4th B",
-    "5th A", "5th B",
-    "6th A", "6th B",
-    "7th A", "7th B",
-    "8th A", "8th B",
-    "9th A", "9th B",
-    "10th A", "10th B",
-    "1st Year A", "1st Year B",
-    "2nd Year A", "2nd Year B"
+    "1st", "2nd", "3rd", "4th", "5th", 
+    "6th", "7th", "8th", 
+    "9th", "9th Girls", 
+    "10th", "10th Girls", 
+    "1st Year", "2nd Year"
 ]
 
 DEFAULT_TEACHERS = [
@@ -102,9 +95,8 @@ if "assignments" not in st.session_state:
     # Stored as list of dicts: {"id": str, "day": str, "period": str, "class": str, "teacher": str, "subject": str}
     st.session_state.assignments = []
 
-# If classes_list is not set or has the old unsectioned classes, refresh it to the new sectioned list
-OLD_DEFAULT_CLASSES = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "1st Year", "2nd Year"]
-if "classes_list" not in st.session_state or st.session_state.classes_list == OLD_DEFAULT_CLASSES:
+# If classes_list is not set or has the old A/B sections, refresh it to the new list
+if "classes_list" not in st.session_state or any(c.endswith(" A") or c.endswith(" B") for c in st.session_state.classes_list):
     st.session_state.classes_list = DEFAULT_CLASSES.copy()
 
 if "teachers_list" not in st.session_state:
@@ -195,14 +187,16 @@ def add_or_update_assignment(day, period, class_name, teacher, subject, allow_ov
 def load_demo_data():
     """Pre-populates a few non-clashing entries for quick demonstration."""
     sample_data = [
-        {"id": "Monday_Period 1_10th A", "day": "Monday", "period": "Period 1", "class": "10th A", "teacher": "Fahad", "subject": "Mathematics"},
-        {"id": "Monday_Period 1_9th A", "day": "Monday", "period": "Period 1", "class": "9th A", "teacher": "Kashif", "subject": "Physics"},
-        {"id": "Monday_Period 1_8th A", "day": "Monday", "period": "Period 1", "class": "8th A", "teacher": "Anum", "subject": "English"},
-        {"id": "Monday_Period 2_10th A", "day": "Monday", "period": "Period 2", "class": "10th A", "teacher": "Anum", "subject": "English"},
-        {"id": "Monday_Period 2_9th A", "day": "Monday", "period": "Period 2", "class": "9th A", "teacher": "Fahad", "subject": "Mathematics"},
-        {"id": "Monday_Period 3_1st Year A", "day": "Monday", "period": "Period 3", "class": "1st Year A", "teacher": "Amir", "subject": "Chemistry"},
-        {"id": "Monday_Period 4_2nd Year A", "day": "Monday", "period": "Period 4", "class": "2nd Year A", "teacher": "Alam Zeb", "subject": "Biology"},
-        {"id": "Monday_Period 5_10th B", "day": "Monday", "period": "Period 5", "class": "10th B", "teacher": "Shoaib", "subject": "Computer Science"},
+        {"id": "Monday_Period 1_10th", "day": "Monday", "period": "Period 1", "class": "10th", "teacher": "Fahad", "subject": "Mathematics"},
+        {"id": "Monday_Period 1_10th Girls", "day": "Monday", "period": "Period 1", "class": "10th Girls", "teacher": "Mehwish", "subject": "Mathematics"},
+        {"id": "Monday_Period 1_9th", "day": "Monday", "period": "Period 1", "class": "9th", "teacher": "Kashif", "subject": "Physics"},
+        {"id": "Monday_Period 1_8th", "day": "Monday", "period": "Period 1", "class": "8th", "teacher": "Anum", "subject": "English"},
+        {"id": "Monday_Period 2_10th", "day": "Monday", "period": "Period 2", "class": "10th", "teacher": "Anum", "subject": "English"},
+        {"id": "Monday_Period 2_9th Girls", "day": "Monday", "period": "Period 2", "class": "9th Girls", "teacher": "Zeenat", "subject": "English"},
+        {"id": "Monday_Period 2_9th", "day": "Monday", "period": "Period 2", "class": "9th", "teacher": "Fahad", "subject": "Mathematics"},
+        {"id": "Monday_Period 3_1st Year", "day": "Monday", "period": "Period 3", "class": "1st Year", "teacher": "Amir", "subject": "Chemistry"},
+        {"id": "Monday_Period 4_2nd Year", "day": "Monday", "period": "Period 4", "class": "2nd Year", "teacher": "Alam Zeb", "subject": "Biology"},
+        {"id": "Monday_Period 5_10th Girls", "day": "Monday", "period": "Period 5", "class": "10th Girls", "teacher": "Shoaib", "subject": "Computer Science"},
     ]
     st.session_state.assignments = sample_data
 
